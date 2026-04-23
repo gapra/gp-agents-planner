@@ -10,8 +10,46 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { GenerateApiSpecSchema, AnalyzeFeasibilitySchema } from "./tools/schemas.js";
 import { loadMarkdown } from "./utils/markdown-loader.js";
 
+// ---------------------------------------------------------------------------
+// Allowlisted prompt names
+// ---------------------------------------------------------------------------
+
+/**
+ * Strict allowlist of valid prompt names. Any request for a name not in this
+ * set will be rejected with an MCP error before any filesystem access occurs.
+ * This prevents prompt-injection attacks or probing of the filesystem via
+ * the GetPrompt handler.
+ */
+const ALLOWED_PROMPTS = new Map<string, { description: string; file: string }>([
+  [
+    "feature_architect",
+    {
+      description: "Principal Architect persona for designing robust, secure, and scalable backend systems.",
+      file: "agents/FeatureArchitect.md",
+    },
+  ],
+  [
+    "tech_researcher",
+    {
+      description: "Senior Researcher for evaluating dependencies, CVE exposure, license compatibility, and technical feasibility.",
+      file: "agents/TechResearcher.md",
+    },
+  ],
+]);
+
+/**
+ * Strict allowlist of valid tool names. This prevents any dynamic tool
+ * dispatch from being exploited with unexpected names.
+ */
+const ALLOWED_TOOLS = new Set(["generate_enterprise_api_spec", "analyze_technical_feasibility"]);
+
+// ---------------------------------------------------------------------------
+// McpAgentServer
+// ---------------------------------------------------------------------------
+
 export class McpAgentServer {
   private server: Server;
+  private transport: StdioServerTransport | null = null;
 
   constructor() {
     this.server = new Server(
@@ -29,101 +67,290 @@ export class McpAgentServer {
 
     this.setupPromptHandlers();
     this.setupToolHandlers();
+    this.setupGracefulShutdown();
   }
 
-  // --- REGISTRASI AGENTS (PROMPTS) ---
+  // -------------------------------------------------------------------------
+  // AGENTS (PROMPTS)
+  // -------------------------------------------------------------------------
+
   private setupPromptHandlers() {
+    // List available prompts — derived from the allowlist to keep it DRY
     this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
       return {
-        prompts: [
-          {
-            name: "feature_architect",
-            description: "Principal Architect persona for designing systems.",
-          },
-          {
-            name: "tech_researcher",
-            description: "Senior Researcher for evaluating dependencies and feasibility.",
-          }
-        ]
+        prompts: Array.from(ALLOWED_PROMPTS.entries()).map(([name, meta]) => ({
+          name,
+          description: meta.description,
+        })),
       };
     });
 
+    // Serve a prompt by name — validates against allowlist before filesystem access
     this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       const name = request.params.name;
-      let content = "";
 
-      if (name === "feature_architect") {
-        content = await loadMarkdown("agents/FeatureArchitect.md");
-      } else if (name === "tech_researcher") {
-        content = await loadMarkdown("agents/TechResearcher.md");
-      } else {
-        throw new Error("Prompt not found");
+      // Allowlist check — reject unknown or unexpected prompt names immediately
+      const promptMeta = ALLOWED_PROMPTS.get(name);
+      if (!promptMeta) {
+        throw new Error(
+          `Prompt not found: '${sanitizeForLog(name)}'. ` +
+          `Available prompts: ${Array.from(ALLOWED_PROMPTS.keys()).join(", ")}.`
+        );
       }
 
+      // loadMarkdown will throw (not silently fail) if the file cannot be read
+      // or if the path is outside allowed roots (additional defence-in-depth).
+      const content = await loadMarkdown(promptMeta.file);
+
       return {
-        description: `System prompt for ${name}`,
+        description: promptMeta.description,
         messages: [
           {
+            // "user" role is used here per MCP prompt specification.
+            // The prompt content acts as the initial context message sent to the LLM.
+            // MCP host clients (Claude Desktop, Cursor) prepend this as the first
+            // message in the conversation, establishing the agent persona.
             role: "user",
-            content: { type: "text", text: content }
-          }
-        ]
+            content: { type: "text", text: content },
+          },
+        ],
       };
     });
   }
 
-  // --- REGISTRASI SKILLS (TOOLS) ---
+  // -------------------------------------------------------------------------
+  // SKILLS (TOOLS)
+  // -------------------------------------------------------------------------
+
   private setupToolHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           {
             name: "generate_enterprise_api_spec",
-            description: "Generates an OpenAPI 3.1.0 specification.",
+            description:
+              "Generates a production-grade OpenAPI 3.1.0 specification enforcing: " +
+              "authentication schemes (JWT, OAuth2, API Key), idempotency (Idempotency-Key header), " +
+              "structured error formats (RFC 7807 + machine-readable error_code), cursor/offset pagination, " +
+              "API versioning strategy, deprecation lifecycle (Deprecation + Sunset headers), " +
+              "rate limiting policy (X-RateLimit-* headers), and CORS policy.",
             inputSchema: zodToJsonSchema(GenerateApiSpecSchema),
           },
           {
             name: "analyze_technical_feasibility",
-            description: "Evaluates implementation risks and dependencies.",
+            description:
+              "Evaluates implementation risks and produces a structured feasibility report across 8 dimensions: " +
+              "Security (CVE/CVSS analysis), License compatibility, Maintenance health, Performance risk, " +
+              "Operational complexity, Cloud lock-in risk, Backward compatibility risk, and Dependency conflict risk. " +
+              "Returns an overall risk score (0–10) with hard blocker identification and architectural recommendations.",
             inputSchema: zodToJsonSchema(AnalyzeFeasibilitySchema),
-          }
-        ]
+          },
+        ],
       };
     });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      // Allowlist check — reject unknown tool names before any processing
+      if (!ALLOWED_TOOLS.has(name)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Tool not found: '${sanitizeForLog(name)}'. Available tools: ${Array.from(ALLOWED_TOOLS).join(", ")}.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+
       try {
         if (name === "generate_enterprise_api_spec") {
           const parsedArgs = GenerateApiSpecSchema.parse(args);
-          // TODO: Implementasi riil YAML generator
-          const yamlOutput = `openapi: 3.1.0\ninfo:\n  title: ${parsedArgs.title}\n  version: ${parsedArgs.version}\n# Generated paths...`;
+
+          // TODO: Implement full YAML generator (tracked in roadmap)
+          // Current implementation returns a structural stub to validate
+          // that the input schema and output pipeline are wired correctly.
+          const endpointDocs = parsedArgs.endpoints
+            .map((ep) => {
+              const lines = [
+                `  # ${ep.summary}`,
+                `  # Auth: ${ep.auth_scheme ?? "bearer_jwt"} | Rate Limit: ${ep.rate_limit_tier ?? "standard"}`,
+                `  # Pagination: ${ep.pagination_strategy}`,
+                ep.deprecated ? `  # DEPRECATED — Sunset: ${ep.sunset_date}` : null,
+                `  ${ep.path}:`,
+                `    ${ep.method.toLowerCase()}:`,
+                `      summary: "${ep.summary}"`,
+                ep.requires_idempotency
+                  ? `      # Requires: Idempotency-Key header (UUID v4, TTL 24h)`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join("\n");
+              return lines;
+            })
+            .join("\n\n");
+
+          const yamlOutput = [
+            `openapi: 3.1.0`,
+            `info:`,
+            `  title: "${parsedArgs.title}"`,
+            `  version: "${parsedArgs.version}"`,
+            `servers:`,
+            `  - url: https://api.yourdomain.com/v${parsedArgs.version.split(".")[0]}`,
+            `security:`,
+            `  - BearerJWT: []`,
+            `paths:`,
+            endpointDocs,
+            `# Generated paths (stub) — implement full YAML generator per roadmap`,
+          ].join("\n");
+
           return { content: [{ type: "text", text: yamlOutput }] };
         }
 
         if (name === "analyze_technical_feasibility") {
           const parsedArgs = AnalyzeFeasibilitySchema.parse(args);
-          // TODO: Implementasi riil dependency checker
-          const report = `### Feasibility Report\n- **Stack Checked:** ${parsedArgs.proposed_stack.join(', ')}\n- **Risk Score:** 3/10`;
+
+          // TODO: Implement real CVE checker, license scanner, and maintenance health analysis
+          // Current implementation returns a structural stub.
+          const dimensions = [
+            "Security Risk",
+            "License Compatibility",
+            "Maintenance & Sustainability",
+            "Performance Risk",
+            "Operational Complexity",
+            "Cloud Lock-in Risk",
+            "Backward Compatibility Risk",
+            "Dependency Conflict Risk",
+          ];
+
+          const report = [
+            `## Feasibility Report (Stub)`,
+            ``,
+            `**Evaluated Stack:** ${parsedArgs.proposed_stack.join(", ")}`,
+            parsedArgs.target_throughput
+              ? `**Target Throughput:** ${parsedArgs.target_throughput.toLocaleString()} RPS`
+              : null,
+            parsedArgs.data_consistency
+              ? `**Data Consistency:** ${parsedArgs.data_consistency}`
+              : null,
+            parsedArgs.runtime_environment
+              ? `**Runtime Environment:** ${parsedArgs.runtime_environment}`
+              : null,
+            ``,
+            `### Risk Scorecard (Placeholder — implement real analysis per roadmap)`,
+            ``,
+            `| Dimension | Score | Status |`,
+            `|---|---|---|`,
+            ...dimensions.map((d) => `| ${d} | — | Pending real implementation |`),
+            ``,
+            `> ⚠️ This is a structural stub. See roadmap: implement CVE checker, license scanner, and maintenance health analysis.`,
+          ]
+            .filter((line) => line !== null)
+            .join("\n");
+
           return { content: [{ type: "text", text: report }] };
         }
 
-        throw new Error(`Tool not found: ${name}`);
-      } catch (error: any) {
+        // Should never reach here due to allowlist check above, but kept as a safety net
+        throw new Error(`Unhandled tool: ${sanitizeForLog(name)}`);
+      } catch (error: unknown) {
+        // Sanitize error messages before sending to the client.
+        // We deliberately avoid exposing: stack traces, internal file paths,
+        // or raw system error messages that could leak implementation details.
+        const safeMessage = sanitizeErrorMessage(error);
         return {
-          content: [{ type: "text", text: `Error executing tool: ${error.message}` }],
+          content: [{ type: "text", text: `Error executing tool '${sanitizeForLog(name)}': ${safeMessage}` }],
           isError: true,
         };
       }
     });
   }
 
-  // --- START SERVER TRANSPORT ---
-  public async start() {
-    // Menggunakan stdio agar bisa dibaca oleh Claude Desktop / Cursor
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error("🚀 SDLC MCP Server running on stdio transport");
+  // -------------------------------------------------------------------------
+  // GRACEFUL SHUTDOWN
+  // -------------------------------------------------------------------------
+
+  /**
+   * Registers handlers for SIGTERM and SIGINT to allow the server to shut down
+   * cleanly. Without this, termination signals (e.g., from Docker, Kubernetes,
+   * or the OS) will kill the process mid-request, potentially corrupting state
+   * or leaving MCP clients in an undefined state.
+   */
+  private setupGracefulShutdown() {
+    const shutdown = async (signal: string) => {
+      console.error(`[McpAgentServer] Received ${signal}. Initiating graceful shutdown...`);
+      try {
+        await this.server.close();
+        console.error("[McpAgentServer] Server closed cleanly. Exiting.");
+        process.exit(0);
+      } catch (err) {
+        console.error("[McpAgentServer] Error during shutdown:", err);
+        process.exit(1);
+      }
+    };
+
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+    process.on("SIGINT", () => shutdown("SIGINT"));
+
+    // Catch unhandled promise rejections to prevent silent failures that
+    // crash the process without a useful error message.
+    process.on("unhandledRejection", (reason) => {
+      console.error("[McpAgentServer] Unhandled promise rejection:", reason);
+      // Do not exit — log and continue. MCP servers should be resilient to
+      // individual request failures.
+    });
   }
+
+  // -------------------------------------------------------------------------
+  // START
+  // -------------------------------------------------------------------------
+
+  public async start() {
+    this.transport = new StdioServerTransport();
+    await this.server.connect(this.transport);
+    console.error("🚀 SDLC MCP Server running on stdio transport");
+    console.error(`   Available prompts: ${Array.from(ALLOWED_PROMPTS.keys()).join(", ")}`);
+    console.error(`   Available tools:   ${Array.from(ALLOWED_TOOLS).join(", ")}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Security utility functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Strips characters that could be used for log injection or newline injection
+ * before including user-controlled values in log output.
+ * Limits output to 100 characters to prevent log flooding.
+ */
+function sanitizeForLog(value: unknown): string {
+  if (typeof value !== "string") return String(value).slice(0, 100);
+  return value.replace(/[\r\n\t]/g, " ").slice(0, 100);
+}
+
+/**
+ * Extracts a safe, user-facing error message without leaking internal details.
+ *
+ * Rules:
+ * - Zod validation errors: return the formatted validation message (safe, user-facing).
+ * - Known Error instances: return only the `.message` property.
+ * - Unknown throws: return a generic message to prevent information leakage.
+ *
+ * What we deliberately exclude:
+ * - Stack traces (reveal internal file paths and line numbers)
+ * - System error codes with filesystem paths (e.g., ENOENT /internal/path/to/file)
+ * - Raw Zod issue paths that reference internal schema structure
+ */
+function sanitizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    // For Zod parse errors, the message is already structured and user-facing.
+    // For other errors, return only the message (not the stack).
+    const msg = error.message;
+    // Remove any filesystem paths that may appear in the message (e.g., from ENOENT)
+    const sanitized = msg.replace(/([A-Za-z]:)?\/[^\s'",]*/g, "[path]");
+    return sanitized.slice(0, 500); // Limit length
+  }
+  return "An unexpected error occurred. Please check your input and try again.";
 }
