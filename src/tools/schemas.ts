@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // Shared validators
@@ -14,7 +14,7 @@ const SemverSchema = z
   .trim()
   .regex(
     /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/,
-    'Must be a valid semantic version (e.g., "1.0.0" or "2.1.0-beta.1")'
+    'Must be a valid semantic version (e.g., "1.0.0" or "2.1.0-beta.1")',
   );
 
 /**
@@ -26,16 +26,13 @@ const SemverSchema = z
 const ApiPathSchema = z
   .string()
   .trim()
-  .min(1, 'Path cannot be empty')
-  .max(500, 'Path must not exceed 500 characters')
+  .min(1, "Path cannot be empty")
+  .max(500, "Path must not exceed 500 characters")
   .regex(
-    /^\/[a-z0-9\-\/{}]*$/,
-    'Path must start with "/" and contain only lowercase letters, digits, hyphens, forward slashes, and curly-brace path parameters (e.g., "/payment-methods/{id}")'
+    /^\/[a-z0-9\-/{}]*$/,
+    'Path must start with "/" and contain only lowercase letters, digits, hyphens, forward slashes, and curly-brace path parameters (e.g., "/payment-methods/{id}")',
   )
-  .refine(
-    (val) => !val.includes('..'),
-    'Path must not contain path traversal sequences ("..")'
-  );
+  .refine((val) => !val.includes(".."), 'Path must not contain path traversal sequences ("..")');
 
 // ---------------------------------------------------------------------------
 // GenerateEnterpriseApiSpec schema
@@ -49,8 +46,8 @@ export const GenerateApiSpecSchema = z.object({
   title: z
     .string()
     .trim()
-    .min(1, 'Title cannot be empty')
-    .max(200, 'Title must not exceed 200 characters')
+    .min(1, "Title cannot be empty")
+    .max(200, "Title must not exceed 200 characters")
     .describe('API Domain Name (e.g., "Payment Service API")'),
 
   /**
@@ -64,59 +61,72 @@ export const GenerateApiSpecSchema = z.object({
    */
   endpoints: z
     .array(
-      z.object({
-        path: ApiPathSchema.describe(
-          'Endpoint path (lowercase, plural nouns, kebab-case, e.g., "/payment-methods/{id}")'
-        ),
-        method: z
-          .enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
-          .describe('HTTP method'),
-        summary: z
-          .string()
-          .trim()
-          .min(1, 'Summary cannot be empty')
-          .max(300, 'Summary must not exceed 300 characters')
-          .describe('Short description of the endpoint purpose'),
-        requires_idempotency: z
-          .boolean()
-          .describe('Enforce Idempotency-Key header for this endpoint'),
-        pagination_strategy: z
-          .enum(['cursor', 'offset', 'none'])
-          .default('none')
-          .describe('Pagination model: cursor (recommended), offset, or none'),
-        auth_scheme: z
-          .enum(['bearer_jwt', 'api_key', 'oauth2_client_credentials', 'none'])
-          .default('bearer_jwt')
-          .describe('Authentication scheme for this endpoint. Defaults to bearer_jwt.'),
-        rate_limit_tier: z
-          .enum(['standard', 'elevated', 'unlimited'])
-          .default('standard')
-          .describe('Rate limiting tier. Defaults to standard (60 req/min).'),
-        deprecated: z
-          .boolean()
-          .default(false)
-          .describe('Mark this endpoint as deprecated. Will inject Deprecation + Sunset headers.'),
-        sunset_date: z
-          .string()
-          .trim()
-          .regex(
-            /^\d{4}-\d{2}-\d{2}$/,
-            'sunset_date must be an ISO 8601 date (YYYY-MM-DD)'
-          )
-          .optional()
-          .describe('Required when deprecated=true. Must be at least 6 months from today.'),
-      })
+      z
+        .object({
+          path: ApiPathSchema.describe(
+            'Endpoint path (lowercase, plural nouns, kebab-case, e.g., "/payment-methods/{id}")',
+          ),
+          method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).describe("HTTP method"),
+          summary: z
+            .string()
+            .trim()
+            .min(1, "Summary cannot be empty")
+            .max(300, "Summary must not exceed 300 characters")
+            .describe("Short description of the endpoint purpose"),
+          requires_idempotency: z
+            .boolean()
+            .describe("Enforce Idempotency-Key header for this endpoint"),
+          pagination_strategy: z
+            .enum(["cursor", "offset", "none"])
+            .default("none")
+            .describe("Pagination model: cursor (recommended), offset, or none"),
+          auth_scheme: z
+            .enum(["bearer_jwt", "api_key", "oauth2_client_credentials", "none"])
+            .default("bearer_jwt")
+            .describe("Authentication scheme for this endpoint. Defaults to bearer_jwt."),
+          rate_limit_tier: z
+            .enum(["standard", "elevated", "unlimited"])
+            .default("standard")
+            .describe("Rate limiting tier. Defaults to standard (60 req/min)."),
+          deprecated: z
+            .boolean()
+            .default(false)
+            .describe(
+              "Mark this endpoint as deprecated. Will inject Deprecation + Sunset headers.",
+            ),
+          sunset_date: z
+            .string()
+            .trim()
+            .regex(/^\d{4}-\d{2}-\d{2}$/, "sunset_date must be an ISO 8601 date (YYYY-MM-DD)")
+            .optional()
+            .describe("Required when deprecated=true. Must be at least 6 months from today."),
+        })
         // Cross-field validation: sunset_date is required when deprecated=true
+        .refine((ep) => !ep.deprecated || ep.sunset_date !== undefined, {
+          message: "sunset_date is required when deprecated is true",
+          path: ["sunset_date"],
+        })
+        // Cross-field validation: when sunset_date is provided, it must be a real
+        // calendar date. Regex above accepts "2026-02-31"; Date silently rolls that
+        // forward into March, so we round-trip the parsed components and reject
+        // anything that does not match the input exactly.
         .refine(
-          (ep) => !ep.deprecated || ep.sunset_date !== undefined,
+          (ep) => {
+            if (!ep.sunset_date) return true;
+            const [yyyy, mm, dd] = ep.sunset_date.split("-").map(Number);
+            const d = new Date(Date.UTC(yyyy, mm - 1, dd));
+            return (
+              d.getUTCFullYear() === yyyy && d.getUTCMonth() === mm - 1 && d.getUTCDate() === dd
+            );
+          },
           {
-            message: 'sunset_date is required when deprecated is true',
-            path: ['sunset_date'],
-          }
-        )
+            message: "sunset_date must be a real calendar date (YYYY-MM-DD)",
+            path: ["sunset_date"],
+          },
+        ),
     )
-    .min(1, 'At least one endpoint must be defined')
-    .max(100, 'Maximum of 100 endpoints per invocation'),
+    .min(1, "At least one endpoint must be defined")
+    .max(100, "Maximum of 100 endpoints per invocation"),
 });
 
 // ---------------------------------------------------------------------------
@@ -134,12 +144,14 @@ export const AnalyzeFeasibilitySchema = z.object({
       z
         .string()
         .trim()
-        .min(1, 'Package name cannot be empty')
-        .max(200, 'Package name must not exceed 200 characters')
+        .min(1, "Package name cannot be empty")
+        .max(200, "Package name must not exceed 200 characters"),
     )
-    .min(1, 'At least one package must be provided')
-    .max(50, 'Maximum of 50 packages per invocation')
-    .describe('List of libraries, tools, or services to evaluate (e.g., ["prisma@5.0.0", "bull@4.12.0"])'),
+    .min(1, "At least one package must be provided")
+    .max(50, "Maximum of 50 packages per invocation")
+    .describe(
+      'List of libraries, tools, or services to evaluate (e.g., ["prisma@5.0.0", "bull@4.12.0"])',
+    ),
 
   /**
    * Expected peak load in Requests Per Second.
@@ -147,20 +159,20 @@ export const AnalyzeFeasibilitySchema = z.object({
    */
   target_throughput: z
     .number()
-    .int('target_throughput must be an integer')
-    .min(1, 'target_throughput must be at least 1 RPS')
-    .max(1_000_000, 'target_throughput must not exceed 1,000,000 RPS')
+    .int("target_throughput must be an integer")
+    .min(1, "target_throughput must be at least 1 RPS")
+    .max(1_000_000, "target_throughput must not exceed 1,000,000 RPS")
     .optional()
-    .describe('Expected peak load in Requests Per Second (RPS)'),
+    .describe("Expected peak load in Requests Per Second (RPS)"),
 
   /**
    * Required data consistency model for the proposed feature.
    * Affects the evaluation of database and messaging choices.
    */
   data_consistency: z
-    .enum(['strong', 'eventual'])
+    .enum(["strong", "eventual"])
     .optional()
-    .describe('Required data consistency model: strong or eventual'),
+    .describe("Required data consistency model: strong or eventual"),
 
   /**
    * Target runtime environment. Affects native addon compatibility,
@@ -179,34 +191,28 @@ export const AnalyzeFeasibilitySchema = z.object({
    * and avoid introducing duplicate functionality.
    */
   existing_stack: z
-    .array(
-      z
-        .string()
-        .trim()
-        .min(1)
-        .max(200)
-    )
-    .max(50, 'Maximum of 50 existing stack entries')
+    .array(z.string().trim().min(1).max(200))
+    .max(50, "Maximum of 50 existing stack entries")
     .optional()
-    .describe('Current production stack for conflict detection'),
+    .describe("Current production stack for conflict detection"),
 
   /**
    * Applicable compliance frameworks. Affects the evaluation of
    * data handling, encryption at rest, audit logging, and access controls.
    */
   compliance_requirements: z
-    .array(z.enum(['gdpr', 'pci_dss', 'hipaa', 'sox', 'iso27001']))
+    .array(z.enum(["gdpr", "pci_dss", "hipaa", "sox", "iso27001"]))
     .max(5)
     .optional()
-    .describe('Applicable compliance frameworks'),
+    .describe("Applicable compliance frameworks"),
 
   /**
    * Target deployment model. Affects operational complexity scoring.
    */
   deployment_model: z
-    .enum(['self_hosted', 'managed_cloud', 'serverless', 'edge'])
+    .enum(["self_hosted", "managed_cloud", "serverless", "edge"])
     .optional()
-    .describe('Target deployment model'),
+    .describe("Target deployment model"),
 });
 
 // ---------------------------------------------------------------------------
