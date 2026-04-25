@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { McpAgentServer } from "./mcp-server.js";
 
 async function main() {

@@ -1,6 +1,6 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---------------------------------------------------------------------------
 // Anchor all paths to the module's own file location — NOT process.cwd().
@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename);
  * Absolute path to the project root, resolved relative to this module file.
  * Stable regardless of the process working directory.
  */
-const PROJECT_ROOT = path.resolve(__dirname, '../../');
+const PROJECT_ROOT = path.resolve(__dirname, "../../");
 
 /**
  * Allowed root directories from which markdown files may be loaded.
@@ -35,8 +35,8 @@ const PROJECT_ROOT = path.resolve(__dirname, '../../');
  * path traversal attacks AND to be stable across all MCP client launch contexts.
  */
 const ALLOWED_ROOTS: readonly string[] = [
-  path.join(PROJECT_ROOT, 'agents'),
-  path.join(PROJECT_ROOT, 'skills'),
+  path.join(PROJECT_ROOT, "agents"),
+  path.join(PROJECT_ROOT, "skills"),
 ] as const;
 
 /**
@@ -63,8 +63,7 @@ export async function loadMarkdown(filePath: string): Promise<string> {
   // "/project/agents-extra/file.md" from matching "/project/agents".
   const isAllowed = ALLOWED_ROOTS.some(
     (allowedRoot) =>
-      resolvedPath.startsWith(allowedRoot + path.sep) ||
-      resolvedPath === allowedRoot
+      resolvedPath.startsWith(allowedRoot + path.sep) || resolvedPath === allowedRoot,
   );
 
   if (!isAllowed) {
@@ -72,12 +71,12 @@ export async function loadMarkdown(filePath: string): Promise<string> {
     // leaking filesystem structure to the caller (which may be an MCP client).
     throw new Error(
       `Access denied: '${filePath}' is not within an allowed directory. ` +
-      `Only files in 'agents/' and 'skills/' directories may be loaded.`
+        `Only files in 'agents/' and 'skills/' directories may be loaded.`,
     );
   }
 
   // Read the file — let the error propagate so the caller can handle it
   // properly (e.g., return an MCP error response instead of silently failing).
-  const content = await fs.readFile(resolvedPath, 'utf-8');
+  const content = await fs.readFile(resolvedPath, "utf-8");
   return content;
 }

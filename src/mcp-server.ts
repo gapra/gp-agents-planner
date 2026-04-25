@@ -9,6 +9,8 @@ import {
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { GenerateApiSpecSchema, AnalyzeFeasibilitySchema } from "./tools/schemas.js";
 import { loadMarkdown } from "./utils/markdown-loader.js";
+import { generateEnterpriseApiSpec } from "./reports/api-spec.js";
+import { generateFeasibilityReport } from "./reports/feasibility.js";
 
 // ---------------------------------------------------------------------------
 // Allowlisted prompt names
@@ -24,14 +26,16 @@ const ALLOWED_PROMPTS = new Map<string, { description: string; file: string }>([
   [
     "feature_architect",
     {
-      description: "Principal Architect persona for designing robust, secure, and scalable backend systems.",
+      description:
+        "Principal Architect persona for designing robust, secure, and scalable backend systems.",
       file: "agents/FeatureArchitect.md",
     },
   ],
   [
     "tech_researcher",
     {
-      description: "Senior Researcher for evaluating dependencies, CVE exposure, license compatibility, and technical feasibility.",
+      description:
+        "Senior Researcher for evaluating dependencies, CVE exposure, license compatibility, and technical feasibility.",
       file: "agents/TechResearcher.md",
     },
   ],
@@ -62,7 +66,7 @@ export class McpAgentServer {
           tools: {},
           prompts: {},
         },
-      }
+      },
     );
 
     this.setupPromptHandlers();
@@ -94,7 +98,7 @@ export class McpAgentServer {
       if (!promptMeta) {
         throw new Error(
           `Prompt not found: '${sanitizeForLog(name)}'. ` +
-          `Available prompts: ${Array.from(ALLOWED_PROMPTS.keys()).join(", ")}.`
+            `Available prompts: ${Array.from(ALLOWED_PROMPTS.keys()).join(", ")}.`,
         );
       }
 
@@ -168,88 +172,13 @@ export class McpAgentServer {
       try {
         if (name === "generate_enterprise_api_spec") {
           const parsedArgs = GenerateApiSpecSchema.parse(args);
-
-          // TODO: Implement full YAML generator (tracked in roadmap)
-          // Current implementation returns a structural stub to validate
-          // that the input schema and output pipeline are wired correctly.
-          const endpointDocs = parsedArgs.endpoints
-            .map((ep) => {
-              const lines = [
-                `  # ${ep.summary}`,
-                `  # Auth: ${ep.auth_scheme ?? "bearer_jwt"} | Rate Limit: ${ep.rate_limit_tier ?? "standard"}`,
-                `  # Pagination: ${ep.pagination_strategy}`,
-                ep.deprecated ? `  # DEPRECATED — Sunset: ${ep.sunset_date}` : null,
-                `  ${ep.path}:`,
-                `    ${ep.method.toLowerCase()}:`,
-                `      summary: "${ep.summary}"`,
-                ep.requires_idempotency
-                  ? `      # Requires: Idempotency-Key header (UUID v4, TTL 24h)`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join("\n");
-              return lines;
-            })
-            .join("\n\n");
-
-          const yamlOutput = [
-            `openapi: 3.1.0`,
-            `info:`,
-            `  title: "${parsedArgs.title}"`,
-            `  version: "${parsedArgs.version}"`,
-            `servers:`,
-            `  - url: https://api.yourdomain.com/v${parsedArgs.version.split(".")[0]}`,
-            `security:`,
-            `  - BearerJWT: []`,
-            `paths:`,
-            endpointDocs,
-            `# Generated paths (stub) — implement full YAML generator per roadmap`,
-          ].join("\n");
-
-          return { content: [{ type: "text", text: yamlOutput }] };
+          const report = generateEnterpriseApiSpec(parsedArgs);
+          return { content: [{ type: "text", text: report }] };
         }
 
         if (name === "analyze_technical_feasibility") {
           const parsedArgs = AnalyzeFeasibilitySchema.parse(args);
-
-          // TODO: Implement real CVE checker, license scanner, and maintenance health analysis
-          // Current implementation returns a structural stub.
-          const dimensions = [
-            "Security Risk",
-            "License Compatibility",
-            "Maintenance & Sustainability",
-            "Performance Risk",
-            "Operational Complexity",
-            "Cloud Lock-in Risk",
-            "Backward Compatibility Risk",
-            "Dependency Conflict Risk",
-          ];
-
-          const report = [
-            `## Feasibility Report (Stub)`,
-            ``,
-            `**Evaluated Stack:** ${parsedArgs.proposed_stack.join(", ")}`,
-            parsedArgs.target_throughput
-              ? `**Target Throughput:** ${parsedArgs.target_throughput.toLocaleString()} RPS`
-              : null,
-            parsedArgs.data_consistency
-              ? `**Data Consistency:** ${parsedArgs.data_consistency}`
-              : null,
-            parsedArgs.runtime_environment
-              ? `**Runtime Environment:** ${parsedArgs.runtime_environment}`
-              : null,
-            ``,
-            `### Risk Scorecard (Placeholder — implement real analysis per roadmap)`,
-            ``,
-            `| Dimension | Score | Status |`,
-            `|---|---|---|`,
-            ...dimensions.map((d) => `| ${d} | — | Pending real implementation |`),
-            ``,
-            `> ⚠️ This is a structural stub. See roadmap: implement CVE checker, license scanner, and maintenance health analysis.`,
-          ]
-            .filter((line) => line !== null)
-            .join("\n");
-
+          const report = generateFeasibilityReport(parsedArgs);
           return { content: [{ type: "text", text: report }] };
         }
 
@@ -261,7 +190,12 @@ export class McpAgentServer {
         // or raw system error messages that could leak implementation details.
         const safeMessage = sanitizeErrorMessage(error);
         return {
-          content: [{ type: "text", text: `Error executing tool '${sanitizeForLog(name)}': ${safeMessage}` }],
+          content: [
+            {
+              type: "text",
+              text: `Error executing tool '${sanitizeForLog(name)}': ${safeMessage}`,
+            },
+          ],
           isError: true,
         };
       }
