@@ -5,6 +5,26 @@ All notable changes to `@gapra/sdlc-planner-mcp` (formerly `sdlc-ai-agents-mcp`)
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-26
+
+### Added
+
+- **2 new agent personas**:
+  - `security_auditor` — Senior AppSec Auditor with STRIDE + OWASP API Top 10 framework, defence-in-depth doctrine, and findings template
+  - `db_schema_designer` — Senior Database Architect with workload-driven design, 12 patterns to recognise, 7 anti-patterns rejected, and expand-and-contract migration doctrine
+- **4 new skills**, all using the canonical 7-section templated report:
+  - `generate_adr` — Architecture Decision Records in Nygard format; flags decision drift, under-documented one-way doors, and missing alternatives
+  - `generate_threat_model` — STRIDE-based threat model with 6-category scoring (0–10) and recommended controls; hard-blocker rule on score ≥ 9
+  - `analyze_observability_gaps` — Pillar-coverage audit (logs/metrics/traces + SLO + alerting); blocker on missing required signals
+  - `generate_runbook` — Operational runbook scaffold with severity tiers, on-call escalation, and per-failure-mode sections; rollback-untested is a release blocker
+- **24 new Vitest tests** across 4 new test files (total now 59 tests across 9 files).
+- README updated with new agents/skills documentation.
+
+### Notes for upgraders
+
+The MCP client config does **not** need any changes — new prompts and tools
+are discovered automatically. Restart your MCP client to see them.
+
 ## [1.3.0] - 2026-04-26
 
 ### Changed (BREAKING for installers, not for tool consumers)
