@@ -2,19 +2,21 @@
 
 > **Principal-level AI Agents and Skills for SDLC Planning via Model Context Protocol (MCP)**
 
-[![npm version](https://img.shields.io/npm/v/sdlc-ai-agents-mcp.svg)](https://www.npmjs.com/package/sdlc-ai-agents-mcp)
-[![npm downloads](https://img.shields.io/npm/dm/sdlc-ai-agents-mcp.svg)](https://www.npmjs.com/package/sdlc-ai-agents-mcp)
+[![npm version](https://img.shields.io/npm/v/@gapra/sdlc-planner-mcp.svg)](https://www.npmjs.com/package/@gapra/sdlc-planner-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/@gapra/sdlc-planner-mcp.svg)](https://www.npmjs.com/package/@gapra/sdlc-planner-mcp)
 
 A TypeScript-based MCP server that exposes specialized **AI Agent personas** and **Skills (Tools)** to assist in Software Development Life Cycle (SDLC) planning — from feature architecture and technical feasibility analysis to security auditing and dependency risk evaluation.
 
-📦 **Published on npm:** [`sdlc-ai-agents-mcp`](https://www.npmjs.com/package/sdlc-ai-agents-mcp) — install with `npx`, no clone required.
+📦 **Published on npm:** [`@gapra/sdlc-planner-mcp`](https://www.npmjs.com/package/@gapra/sdlc-planner-mcp) — install with `npx`, no clone required.
+
+> **Renamed from `sdlc-ai-agents-mcp`** as of `1.3.0`. The old package is deprecated and points here. See [CHANGELOG](CHANGELOG.md) for migration steps.
 
 ---
 
 ## 📐 Architecture Overview
 
 ```
-gp-agents-planner/
+sdlc-planner-mcp/
 ├── agents/                        # Agent persona definitions (as MCP Prompts)
 │   ├── FeatureArchitect.md        # Principal Feature Architect — full lifecycle coverage
 │   └── TechResearcher.md          # Senior Technical Researcher — supply chain & risk analysis
@@ -217,7 +219,7 @@ SIGTERM and SIGINT handlers ensure the MCP server closes cleanly, preventing mid
 No clone, no build. The MCP client launches the server on demand via `npx`:
 
 ```bash
-npx -y sdlc-ai-agents-mcp
+npx -y @gapra/sdlc-planner-mcp
 ```
 
 You normally do not run this directly — point your MCP client at it (see [Connecting to an MCP Client](#-connecting-to-an-mcp-client) below).
@@ -225,15 +227,15 @@ You normally do not run this directly — point your MCP client at it (see [Conn
 To install globally instead of using `npx`:
 
 ```bash
-npm install -g sdlc-ai-agents-mcp
-sdlc-ai-agents-mcp   # binary on your PATH
+npm install -g @gapra/sdlc-planner-mcp
+sdlc-planner-mcp   # binary on your PATH
 ```
 
 ### Option B — Clone and build from source (for contributors)
 
 ```bash
-git clone https://github.com/your-username/gp-agents-planner.git
-cd gp-agents-planner
+git clone https://github.com/gapra/sdlc-planner-mcp.git
+cd sdlc-planner-mcp
 npm install
 npm run dev          # development (tsx)
 npm run build && npm start   # production build
@@ -254,25 +256,25 @@ Works in **Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`.curs
 ```json
 {
   "mcpServers": {
-    "sdlc-agents": {
+    "sdlc-planner": {
       "command": "npx",
-      "args": ["-y", "sdlc-ai-agents-mcp"]
+      "args": ["-y", "@gapra/sdlc-planner-mcp"]
     }
   }
 }
 ```
 
-> The first launch downloads the package; subsequent launches reuse the npx cache. Pin a version with `sdlc-ai-agents-mcp@1.1.0` if you want reproducible behaviour across machines.
+> The first launch downloads the package; subsequent launches reuse the npx cache. Pin a version with `@gapra/sdlc-planner-mcp@1.3.0` if you want reproducible behaviour across machines.
 
 ### Recipe 2 — Globally installed binary
 
-After `npm install -g sdlc-ai-agents-mcp`:
+After `npm install -g @gapra/sdlc-planner-mcp`:
 
 ```json
 {
   "mcpServers": {
-    "sdlc-agents": {
-      "command": "sdlc-ai-agents-mcp"
+    "sdlc-planner": {
+      "command": "sdlc-planner-mcp"
     }
   }
 }
@@ -285,15 +287,15 @@ After `npm run build` in your clone:
 ```json
 {
   "mcpServers": {
-    "sdlc-agents": {
+    "sdlc-planner": {
       "command": "node",
-      "args": ["/absolute/path/to/gp-agents-planner/dist/index.js"]
+      "args": ["/absolute/path/to/sdlc-planner-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-> **Restart your MCP client** after editing the config. In Claude Desktop you should see `sdlc-agents` in the MCP icon menu, with `feature_architect` / `tech_researcher` available as prompts and the two skills as callable tools.
+> **Restart your MCP client** after editing the config. In Claude Desktop you should see `sdlc-planner` in the MCP icon menu, with `feature_architect` / `tech_researcher` available as prompts and the two skills as callable tools.
 
 ---
 

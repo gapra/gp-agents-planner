@@ -1,9 +1,61 @@
 # Changelog
 
-All notable changes to `sdlc-ai-agents-mcp` are documented in this file.
+All notable changes to `@gapra/sdlc-planner-mcp` (formerly `sdlc-ai-agents-mcp`) are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.3.0] - 2026-04-26
+
+### Changed (BREAKING for installers, not for tool consumers)
+
+- **Renamed npm package** from `sdlc-ai-agents-mcp` to **`@gapra/sdlc-planner-mcp`**.
+  The old package on the registry is deprecated with a pointer to the new name.
+- **Renamed CLI binary** from `sdlc-ai-agents-mcp` to **`sdlc-planner-mcp`**.
+- **Renamed GitHub repository** from `gp-agents-planner` to `sdlc-planner-mcp`
+  (GitHub redirects from the old URL automatically).
+
+### Migration
+
+The MCP **tool names**, **prompt names**, **input schemas**, and **output
+templates are unchanged**. Only the install identifier changes.
+
+Update your MCP client config (`claude_desktop_config.json` or
+`.cursor/mcp.json`):
+
+```diff
+ {
+   "mcpServers": {
+-    "sdlc-agents": {
++    "sdlc-planner": {
+       "command": "npx",
+-      "args": ["-y", "sdlc-ai-agents-mcp"]
++      "args": ["-y", "@gapra/sdlc-planner-mcp"]
+     }
+   }
+ }
+```
+
+If you installed globally:
+
+```bash
+npm uninstall -g sdlc-ai-agents-mcp
+npm install   -g @gapra/sdlc-planner-mcp
+```
+
+If you cloned the repo, update your remote (one-time, GitHub redirects
+work indefinitely but explicit is better):
+
+```bash
+git remote set-url origin git@github.com:gapra/sdlc-planner-mcp.git
+```
+
+### Why the rename?
+
+- The new name describes _what the tool does_ (plans the SDLC), not _what
+  it is composed of_ (AI agents). Easier to discover, easier to remember.
+- Scoping under `@gapra` makes ownership explicit and removes name-collision
+  risk on the npm registry.
 
 ## [1.2.0] - 2026-04-25
 
@@ -19,10 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the previous structural stub. Emits real YAML with `securitySchemes`
   (BearerJWT, OAuth2 client credentials, ApiKey), parameter refs
   (`X-Request-ID`, `Idempotency-Key`, cursor/offset paging), `ProblemDetail`
-  + pagination schemas, and standard error responses (400/401/403/404/422/
-  429/503). Includes per-endpoint risk detection: missing auth (`AUTH-`),
-  missing idempotency on writes (`IDEMP-`), unlimited rate tier (`RATE-`),
-  short sunset window (`SUNSET-`), pre-1.0 version (`VERSION-PRE-1.0`).
+  and pagination schemas, and standard error responses
+  (400/401/403/404/422/429/503). Includes per-endpoint risk detection:
+  missing auth (`AUTH-`), missing idempotency on writes (`IDEMP-`),
+  unlimited rate tier (`RATE-`), short sunset window (`SUNSET-`),
+  pre-1.0 version (`VERSION-PRE-1.0`).
 - **Heuristic feasibility scoring** (`src/reports/feasibility.ts`) — replaces
   the previous structural stub. Weighted 8-dimension scoring (security ×2,
   license ×2, maintenance ×1.5, others ×1) with per-package categorisation,
