@@ -12,6 +12,34 @@ describe("loadMarkdown", () => {
     expect(content.length).toBeGreaterThan(0);
   });
 
+  it("loads each of the four registered agent personas", async () => {
+    const agents = [
+      "agents/FeatureArchitect.md",
+      "agents/TechResearcher.md",
+      "agents/SecurityAuditor.md",
+      "agents/DbSchemaDesigner.md",
+    ];
+    for (const a of agents) {
+      const content = await loadMarkdown(a);
+      expect(content).toMatch(/^# /);
+    }
+  });
+
+  it("loads each of the six registered skill docs", async () => {
+    const skills = [
+      "skills/GenerateEnterpriseApiSpec.md",
+      "skills/AnalyzeFeasibility.md",
+      "skills/GenerateAdr.md",
+      "skills/GenerateThreatModel.md",
+      "skills/AnalyzeObservabilityGaps.md",
+      "skills/GenerateRunbook.md",
+    ];
+    for (const s of skills) {
+      const content = await loadMarkdown(s);
+      expect(content).toMatch(/Tool Name/);
+    }
+  });
+
   it("rejects path traversal escapes", async () => {
     await expect(loadMarkdown("agents/../../etc/passwd")).rejects.toThrow(/Access denied/);
   });

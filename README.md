@@ -19,22 +19,32 @@ A TypeScript-based MCP server that exposes specialized **AI Agent personas** and
 sdlc-planner-mcp/
 ├── agents/                        # Agent persona definitions (as MCP Prompts)
 │   ├── FeatureArchitect.md        # Principal Feature Architect — full lifecycle coverage
-│   └── TechResearcher.md          # Senior Technical Researcher — supply chain & risk analysis
+│   ├── TechResearcher.md          # Senior Technical Researcher — supply chain & risk analysis
+│   ├── SecurityAuditor.md         # Senior AppSec Auditor — STRIDE + OWASP API Top 10
+│   └── DbSchemaDesigner.md        # Senior DB Architect — schemas built for production scale
 ├── skills/                        # Skill definitions (as MCP Tools)
-│   ├── AnalyzeFeasibility.md      # 8-dimension feasibility evaluation framework
-│   └── GenerateEnterpriseApiSpec.md # OpenAPI 3.1.0 spec generation with full enforcement rules
+│   ├── GenerateEnterpriseApiSpec.md  # OpenAPI 3.1.0 spec generation with full enforcement rules
+│   ├── AnalyzeFeasibility.md         # 8-dimension feasibility evaluation framework
+│   ├── GenerateAdr.md                # Nygard-format Architecture Decision Records
+│   ├── GenerateThreatModel.md        # STRIDE-based threat model
+│   ├── AnalyzeObservabilityGaps.md   # Logs/metrics/traces/SLO/alerting audit
+│   └── GenerateRunbook.md            # Operational runbook scaffold
 ├── src/
 │   ├── index.ts                   # Entry point with fatal error handling
 │   ├── mcp-server.ts              # MCP server — allowlists, graceful shutdown, error sanitization
 │   ├── reports/
 │   │   ├── template.ts            # Canonical 7-section report template + JSON envelope
 │   │   ├── api-spec.ts            # Generates OpenAPI 3.1.0 YAML wrapped in templated report
-│   │   └── feasibility.ts         # Heuristic scoring across 8 dimensions wrapped in templated report
+│   │   ├── feasibility.ts         # Heuristic scoring across 8 dimensions
+│   │   ├── adr.ts                 # ADR generator (Nygard format)
+│   │   ├── threat-model.ts        # STRIDE scoring across 6 categories
+│   │   ├── observability.ts       # Pillar-coverage analysis + instrumentation plan
+│   │   └── runbook.ts             # Runbook scaffold + production-readiness verdict
 │   ├── tools/
 │   │   └── schemas.ts             # Zod schemas with semver validation, path safety, cross-field rules
 │   └── utils/
 │       └── markdown-loader.ts     # Markdown loader with path traversal prevention
-├── tests/                         # Vitest suite (35 tests covering schemas, security, generators)
+├── tests/                         # Vitest suite covering schemas, security, all 6 generators
 ├── .github/workflows/ci.yml       # Lint + format + typecheck + build + test on Node 20/22
 ├── .eslintrc.cjs / .prettierrc.json
 ├── package.json
@@ -92,6 +102,48 @@ A **Senior Technical Researcher & Dependency Analyst** persona. Evaluates the fe
 | 📋 **Output: Technical Evaluation Matrix** | Structured markdown table comparing all candidates across all dimensions with ✅/⚠️/❌ indicators                                                  |
 
 **Allowed Skills:** `analyze_technical_feasibility`
+
+---
+
+### `security_auditor`
+
+**File:** `agents/SecurityAuditor.md`
+
+A **Senior Application Security Engineer / Staff-Plus Auditor** persona. Reasons like the adversary so you find what will be exploited before they do. Distinguishes vulnerability from exposure (reachability matters), insists on defence in depth, and writes findings engineers can fix in a sprint.
+
+**Coverage:**
+
+| Area                            | Detail                                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| 🧠 **How they think**           | Assume breach, not "if"; vuln vs exposure; defence in depth; least privilege > detection |
+| 🛑 **Constraints**              | Never roll your own crypto; never weaken a control to ship faster; never log secrets/PII |
+| 🔬 **Audit Plan Framework**     | Scope · Asset Inventory · Threat Actors · STRIDE Walk · Disqualification                 |
+| 📋 **OWASP API Top 10 (2023+)** | All 10 mapped with concrete validation questions per risk                                |
+| 📝 **Findings Template**        | Title · Severity · Reachability · Reproduction · Impact · Fix · Detection · Scope        |
+| ⚖️ **Decision Rules**           | When to halt rollout (auth/authz bypass, critical CVE reachable, secrets in repo)        |
+
+**Allowed Skills:** `generate_threat_model`, `analyze_technical_feasibility`, `generate_enterprise_api_spec`, `generate_adr`
+
+---
+
+### `db_schema_designer`
+
+**File:** `agents/DbSchemaDesigner.md`
+
+A **Senior Data Engineer / Staff-Plus Database Architect** persona. Designs for the table at year three, not week one. Workload-driven design, online migrations, deliberate denormalisation, and tested rollback procedures.
+
+**Coverage:**
+
+| Area                            | Detail                                                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 🧠 **How they think**           | Workload first (p99 at 100× rows); OLTP vs OLAP separation; multi-tenancy by default; built-in deletion strategy         |
+| 🛑 **Constraints**              | No floats for money; no varchar without length; no mutable PKs; no schema + code in one release                          |
+| 🔬 **Schema Design Plan**       | Workload Characterisation · Access Patterns · Normalisation · Index · Partitioning · Constraints · Retention · Migration |
+| 📋 **12 Patterns to Recognise** | Surrogate keys · Soft delete · Optimistic locking · Outbox · Saga · CQRS · Time-series partitioning · etc.               |
+| 🚫 **Anti-patterns Rejected**   | EAV · God tables · Unindexed FKs · Auto-generated migrations without review                                              |
+| 🔄 **Migration Doctrine**       | Expand → Deploy → Contract; online migration constraints (CONCURRENTLY, NOT NULL with default)                           |
+
+**Allowed Skills:** `generate_adr`, `analyze_technical_feasibility`, `generate_threat_model`, `generate_runbook`
 
 ---
 
@@ -174,6 +226,77 @@ Evaluates proposed libraries or architectural patterns across **8 scored dimensi
 **Overall Risk Score** = weighted average (Security × 2, License × 2, Maintenance × 1.5, others × 1)
 
 **Output:** Structured Feasibility Report with Risk Scorecard, Hard Blockers list, Executive Summary, Per-Package Findings, Architectural Recommendations, Suggested Alternatives, and Re-evaluation Triggers.
+
+---
+
+### `generate_adr`
+
+**File:** `skills/GenerateAdr.md`
+
+Generates an **Architecture Decision Record (ADR)** in Nygard format wrapped in the canonical templated report. Captures context, options compared (≥ 2 enforced), the chosen decision, reversibility (one-way vs two-way door), consequences, and links. Surfaces ADR quality issues — missing alternatives, decision drift, under-documented one-way doors — as risk register entries.
+
+| Quality Check                                 | Severity if Violated     |
+| --------------------------------------------- | ------------------------ |
+| At least 2 options compared                   | Schema rejection         |
+| Decision text references a chosen option name | 🟡 `ADR-DECISION-DRIFT`  |
+| One-way door has ≥ 3 consequences             | 🔴 `ADR-ONEWAY-UNDERDOC` |
+| Every option has at least one pro or con      | 🟢 `ADR-EMPTY-OPTION`    |
+
+**Output:** Ready-to-commit `docs/adr/0042-<slug>.md` markdown + options table + quality checklist.
+
+---
+
+### `generate_threat_model`
+
+**File:** `skills/GenerateThreatModel.md`
+
+Produces a **STRIDE-based threat model** scoring all six categories 0–10 with recommended controls per category. Heuristic scoring driven by inputs (auth scheme, asset sensitivity, trust boundaries, PII handling, compliance regime). Designed to **force the security conversation** rather than replace a human auditor.
+
+| STRIDE Category            | What drives the score                           |
+| -------------------------- | ----------------------------------------------- |
+| **Spoofing**               | Authentication scheme; entry point count        |
+| **Tampering**              | Restricted asset count; trust boundary count    |
+| **Repudiation**            | Compliance regime (SOX/HIPAA → mandatory audit) |
+| **Information Disclosure** | PII handling × compliance regime                |
+| **Denial of Service**      | Entry point count; auth presence                |
+| **Elevation of Privilege** | Restricted asset presence; trust boundaries     |
+
+**Hard rule:** A STRIDE score ≥ 9 forces `verdict: "reject"`.
+
+---
+
+### `analyze_observability_gaps`
+
+**File:** `skills/AnalyzeObservabilityGaps.md`
+
+Evaluates a service against the FeatureArchitect **Observability Mandate**: structured logs, RED metrics, distributed traces, SLO definitions, symptom-based alerting. Identifies missing required signals, alert fatigue risk, and produces a concrete instrumentation plan ordered by priority.
+
+| Risk ID                     | Trigger                            | Severity   |
+| --------------------------- | ---------------------------------- | ---------- |
+| `OBS-NO-LOGS`               | `logs` not in current signals      | 🚫 Blocker |
+| `OBS-NO-METRICS`            | `metrics` not in current signals   | 🚫 Blocker |
+| `OBS-NO-TRACES`             | `traces` not in current signals    | 🔴 High    |
+| `OBS-NO-SLO`                | No SLO targets declared            | 🔴 High    |
+| `OBS-ALERT-FATIGUE`         | `alert_count > 50`                 | 🟡 Medium  |
+| `OBS-SERVERLESS-NO-METRICS` | Serverless deployment + no metrics | 🔴 High    |
+
+---
+
+### `generate_runbook`
+
+**File:** `skills/GenerateRunbook.md`
+
+Produces an **operational runbook scaffold**: severity tiers, on-call escalation, upstream dependencies, rollback procedure, and one detailed section per known failure mode (detection + mitigation + investigation + postmortem template). Verdict reflects production-readiness.
+
+| Risk ID                     | Trigger                           | Severity   |
+| --------------------------- | --------------------------------- | ---------- |
+| `RUNBOOK-NO-ROLLBACK-DRILL` | `has_tested_rollback = false`     | 🚫 Blocker |
+| `RUNBOOK-NO-SLO`            | `slo_target` missing              | 🔴 High    |
+| `RUNBOOK-NO-DEPS`           | No upstream dependencies declared | 🟡 Medium  |
+| `RUNBOOK-FEW-FAILURE-MODES` | < 3 failure modes documented      | 🟡 Medium  |
+| `RUNBOOK-NO-SEV1`           | No SEV-1 tier defined             | 🟡 Medium  |
+
+**Output:** Ready-to-commit `docs/runbooks/<service>.md` markdown + readiness checklist + failure mode map.
 
 ---
 

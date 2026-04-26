@@ -7,10 +7,21 @@ import {
   GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { GenerateApiSpecSchema, AnalyzeFeasibilitySchema } from "./tools/schemas.js";
+import {
+  GenerateApiSpecSchema,
+  AnalyzeFeasibilitySchema,
+  GenerateAdrSchema,
+  GenerateThreatModelSchema,
+  AnalyzeObservabilityGapsSchema,
+  GenerateRunbookSchema,
+} from "./tools/schemas.js";
 import { loadMarkdown } from "./utils/markdown-loader.js";
 import { generateEnterpriseApiSpec } from "./reports/api-spec.js";
 import { generateFeasibilityReport } from "./reports/feasibility.js";
+import { generateAdr } from "./reports/adr.js";
+import { generateThreatModel } from "./reports/threat-model.js";
+import { generateObservabilityReport } from "./reports/observability.js";
+import { generateRunbook } from "./reports/runbook.js";
 
 // ---------------------------------------------------------------------------
 // Allowlisted prompt names
@@ -39,13 +50,36 @@ const ALLOWED_PROMPTS = new Map<string, { description: string; file: string }>([
       file: "agents/TechResearcher.md",
     },
   ],
+  [
+    "security_auditor",
+    {
+      description:
+        "Senior Application Security Engineer persona for STRIDE threat modelling, OWASP API Top 10 review, and producing actionable security findings.",
+      file: "agents/SecurityAuditor.md",
+    },
+  ],
+  [
+    "db_schema_designer",
+    {
+      description:
+        "Senior Database Architect persona for designing schemas that survive production scale: workload-driven design, online migrations, indexing strategy, and partitioning.",
+      file: "agents/DbSchemaDesigner.md",
+    },
+  ],
 ]);
 
 /**
  * Strict allowlist of valid tool names. This prevents any dynamic tool
  * dispatch from being exploited with unexpected names.
  */
-const ALLOWED_TOOLS = new Set(["generate_enterprise_api_spec", "analyze_technical_feasibility"]);
+const ALLOWED_TOOLS = new Set([
+  "generate_enterprise_api_spec",
+  "analyze_technical_feasibility",
+  "generate_adr",
+  "generate_threat_model",
+  "analyze_observability_gaps",
+  "generate_runbook",
+]);
 
 // ---------------------------------------------------------------------------
 // McpAgentServer
@@ -149,6 +183,38 @@ export class McpAgentServer {
               "Returns an overall risk score (0–10) with hard blocker identification and architectural recommendations.",
             inputSchema: zodToJsonSchema(AnalyzeFeasibilitySchema),
           },
+          {
+            name: "generate_adr",
+            description:
+              "Generates an Architecture Decision Record (ADR) in Nygard format. Captures context, options compared, " +
+              "the chosen decision, reversibility (one-way vs two-way door), consequences, and related links. " +
+              "Surfaces ADR quality issues (missing alternatives, decision drift, under-documented one-way doors) as risks.",
+            inputSchema: zodToJsonSchema(GenerateAdrSchema),
+          },
+          {
+            name: "generate_threat_model",
+            description:
+              "Produces a STRIDE-based threat model (Spoofing, Tampering, Repudiation, Information Disclosure, " +
+              "Denial of Service, Elevation of Privilege). Scores each category 0–10, lists recommended controls, " +
+              "and flags compliance/auth/PII interactions. Output drives security review punch-list.",
+            inputSchema: zodToJsonSchema(GenerateThreatModelSchema),
+          },
+          {
+            name: "analyze_observability_gaps",
+            description:
+              "Evaluates a service against the Observability Mandate (structured logs, RED metrics, distributed " +
+              "traces, SLOs, symptom alerting). Identifies missing required signals, alert fatigue risk, and " +
+              "produces a concrete instrumentation plan ordered by priority.",
+            inputSchema: zodToJsonSchema(AnalyzeObservabilityGapsSchema),
+          },
+          {
+            name: "generate_runbook",
+            description:
+              "Produces an operational runbook scaffold: severity tiers, on-call escalation, upstream dependencies, " +
+              "rollback procedure, and one section per known failure mode (detection + mitigation + investigation + " +
+              "postmortem template). Verdict reflects production-readiness (rollback tested, SLO defined, etc.).",
+            inputSchema: zodToJsonSchema(GenerateRunbookSchema),
+          },
         ],
       };
     });
@@ -179,6 +245,30 @@ export class McpAgentServer {
         if (name === "analyze_technical_feasibility") {
           const parsedArgs = AnalyzeFeasibilitySchema.parse(args);
           const report = generateFeasibilityReport(parsedArgs);
+          return { content: [{ type: "text", text: report }] };
+        }
+
+        if (name === "generate_adr") {
+          const parsedArgs = GenerateAdrSchema.parse(args);
+          const report = generateAdr(parsedArgs);
+          return { content: [{ type: "text", text: report }] };
+        }
+
+        if (name === "generate_threat_model") {
+          const parsedArgs = GenerateThreatModelSchema.parse(args);
+          const report = generateThreatModel(parsedArgs);
+          return { content: [{ type: "text", text: report }] };
+        }
+
+        if (name === "analyze_observability_gaps") {
+          const parsedArgs = AnalyzeObservabilityGapsSchema.parse(args);
+          const report = generateObservabilityReport(parsedArgs);
+          return { content: [{ type: "text", text: report }] };
+        }
+
+        if (name === "generate_runbook") {
+          const parsedArgs = GenerateRunbookSchema.parse(args);
+          const report = generateRunbook(parsedArgs);
           return { content: [{ type: "text", text: report }] };
         }
 
