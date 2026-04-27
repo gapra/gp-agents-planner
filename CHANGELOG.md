@@ -5,6 +5,55 @@ All notable changes to `@gapra/sdlc-planner-mcp` (formerly `sdlc-ai-agents-mcp`)
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-27
+
+### Added
+
+- **4 new optional fields on `analyze_technical_feasibility`** (`AnalyzeFeasibilitySchema`):
+  - `feature_name` — included in the report title and executive summary.
+  - `team_size` — number of engineers; shown in context table and exec summary.
+  - `timeline_weeks` — delivery timeline; shown in context table and exec summary.
+  - `constraints` — free-text array of engineering constraints (e.g. `"Must run on AWS ECS
+Fargate"`, `"Zero-downtime rolling deploys required"`); rendered verbatim in section 3.3
+    Constraint Analysis. Previously this section only surfaced structured fields
+    (`target_throughput`, `runtime_environment`, etc.) and ignored engineer-declared constraints.
+
+- **`examples/` folder** — 6 realistic, runnable example reports covering all tools, built
+  around a single `checkout-service` scenario so readers can see how one service is evaluated
+  from six different angles:
+  - `examples/report-api-spec.md` — 8 endpoints (1 deprecated with `sunset_date`), cursor pagination, elevated rate tier on `/confirm`
+  - `examples/report-feasibility.md` — 10 components, PCI-DSS + GDPR, 4 ECS constraints, 6-engineer / 10-week timeline
+  - `examples/report-adr.md` — ADR-0012: event sourcing vs. audit table vs. CDC (one-way door, 3 options, 6 consequences)
+  - `examples/report-threat-model.md` — STRIDE scorecard, 5 assets (1 restricted), 6 trust boundaries, PCI-DSS + GDPR
+  - `examples/report-observability-gaps.md` — service with only logs, no metrics/traces/SLOs/alerts (verdict: 🚫 Reject)
+  - `examples/report-runbook.md` — 6 failure modes, 5 upstream dependencies, tested rollback, full escalation chain
+
+### Fixed
+
+- **Instrumentation plan step numbering** (`analyze_observability_gaps`) — steps were numbered
+  with hard-coded integers (`1.`, `2.`, `3.`…), causing the plan to start at `2.` when logs
+  were already present and step 1 was skipped. Steps are now numbered sequentially from the
+  filtered list.
+- **Per-component findings layout** (`analyze_technical_feasibility`) — components with no
+  flags rendered as empty H4 sections with no body text. Clean packages are now grouped under
+  a single "✅ No issues detected" heading, keeping flagged components visually prominent.
+- **Abbreviation-aware context table labels** (`template.ts`) — field keys like `slo_targets`
+  rendered as "Slo Targets" and `adr_id` as "Adr Id". The `humanize()` function now promotes
+  known abbreviations (`adr`, `api`, `slo`, `sli`, `id`, `rps`, `url`, `jwt`, `pci`) to
+  uppercase, producing "SLO Targets", "ADR ID", etc.
+- **Executive summary specificity**:
+  - `analyze_technical_feasibility` — summary now mentions feature name, timeline, engineer
+    count, and lists blocker IDs by name instead of a generic count.
+  - `analyze_observability_gaps` — summary now lists critical user journey names verbatim
+    and explicitly labels missing signals as release blockers.
+
+### Notes for upgraders
+
+- The MCP **tool names**, **prompt names**, and **input schemas are backward-compatible**.
+  Existing MCP client configs and tool calls continue to work without any changes.
+- The 4 new fields on `analyze_technical_feasibility` are **optional** — existing calls that
+  omit them produce output identical to 1.4.0.
+
 ## [1.4.0] - 2026-04-26
 
 ### Added

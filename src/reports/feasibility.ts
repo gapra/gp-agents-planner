@@ -519,7 +519,9 @@ function buildExecutiveSummary(
 
   const blockers = risks.filter((r) => r.severity === "blocker");
   const highs = risks.filter((r) => r.severity === "high");
-  const timeline = input.timeline_weeks ? ` (${input.timeline_weeks}-week timeline, ${input.team_size ?? "?"} engineers)` : "";
+  const timeline = input.timeline_weeks
+    ? ` (${input.timeline_weeks}-week timeline, ${input.team_size ?? "?"} engineers)`
+    : "";
 
   const riskSentence =
     blockers.length > 0

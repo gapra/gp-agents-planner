@@ -198,7 +198,9 @@ function humanize(key: string): string {
   return key
     .split(/[_\s]+/)
     .filter(Boolean)
-    .map((w) => (ABBREVIATIONS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .map((w) =>
+      ABBREVIATIONS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1),
+    )
     .join(" ");
 }
 

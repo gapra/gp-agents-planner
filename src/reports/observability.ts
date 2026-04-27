@@ -235,11 +235,16 @@ function buildExecutiveSummary(
       : "No critical user journeys declared.";
 
   const riskSentence =
-    riskCount === 0 ? "No risks identified." : `${riskCount} risk(s) identified — see Risk Register.`;
+    riskCount === 0
+      ? "No risks identified."
+      : `${riskCount} risk(s) identified — see Risk Register.`;
 
-  return [`**${input.service_name}** ${verdictText}.`, signalSentence, journeySentence, riskSentence].join(
-    " ",
-  );
+  return [
+    `**${input.service_name}** ${verdictText}.`,
+    signalSentence,
+    journeySentence,
+    riskSentence,
+  ].join(" ");
 }
 
 function buildPillarTable(pillars: PillarFinding[]): string {
