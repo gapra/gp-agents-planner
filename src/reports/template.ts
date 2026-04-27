@@ -191,12 +191,14 @@ export function renderReport(input: ReportInput): string {
   ].join("\n");
 }
 
-/** "target_throughput" → "Target Throughput" */
+const ABBREVIATIONS = new Set(["adr", "api", "slo", "sli", "id", "rps", "url", "jwt", "pci"]);
+
+/** "adr_id" → "ADR ID", "slo_targets" → "SLO Targets", "target_throughput" → "Target Throughput" */
 function humanize(key: string): string {
   return key
     .split(/[_\s]+/)
     .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .map((w) => (ABBREVIATIONS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
     .join(" ");
 }
 

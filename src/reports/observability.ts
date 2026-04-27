@@ -223,15 +223,23 @@ function buildExecutiveSummary(
     reject: "is **not production-ready** — required signals are missing",
     needs_review: "requires manual SRE review",
   }[verdict];
-  return [
-    `${input.service_name} ${verdictText}.`,
+
+  const signalSentence =
     missingRequired.length === 0
       ? "All three required signal types (logs, metrics, traces) are in place."
-      : `Missing required signal type(s): **${missingRequired.join(", ")}**.`,
-    riskCount === 0
-      ? "No risks identified."
-      : `${riskCount} risk(s) identified — see Risk Register.`,
-  ].join(" ");
+      : `Missing required signal type(s): **${missingRequired.join(", ")}** — these are release blockers.`;
+
+  const journeySentence =
+    input.critical_user_journeys.length > 0
+      ? `${input.critical_user_journeys.length} critical user journey(s) identified (${input.critical_user_journeys.map((j) => `"${j}"`).join("; ")}) — each requires a dedicated synthetic probe and deadman's-switch alert.`
+      : "No critical user journeys declared.";
+
+  const riskSentence =
+    riskCount === 0 ? "No risks identified." : `${riskCount} risk(s) identified — see Risk Register.`;
+
+  return [`**${input.service_name}** ${verdictText}.`, signalSentence, journeySentence, riskSentence].join(
+    " ",
+  );
 }
 
 function buildPillarTable(pillars: PillarFinding[]): string {
@@ -273,34 +281,34 @@ function buildInstrumentationPlan(
   input: AnalyzeObservabilityGapsInput,
   missingRequired: string[],
 ): string {
-  const steps: string[] = [];
+  const items: string[] = [];
   if (missingRequired.includes("logs")) {
-    steps.push(
-      "1. **Logs:** Adopt OpenTelemetry Logs SDK or pino with structured JSON. Mandatory fields: timestamp, level, service, version, trace_id, span_id, request_id, user_id (hashed), duration_ms.",
+    items.push(
+      "**Logs:** Adopt OpenTelemetry Logs SDK or pino with structured JSON. Mandatory fields: timestamp, level, service, version, trace_id, span_id, request_id, user_id (hashed), duration_ms.",
     );
   }
   if (missingRequired.includes("metrics")) {
-    steps.push(
-      "2. **Metrics:** Emit Prometheus/OTel metrics: `requests_total{method, route, status}` (counter), `request_duration_seconds{method, route}` (histogram with default buckets).",
+    items.push(
+      "**Metrics:** Emit Prometheus/OTel metrics: `requests_total{method, route, status}` (counter), `request_duration_seconds{method, route}` (histogram with default buckets).",
     );
   }
   if (missingRequired.includes("traces")) {
-    steps.push(
-      "3. **Traces:** Initialise OTel tracer SDK; inject + extract W3C TraceContext on every inbound + outbound call. Ensure DB/queue/HTTP clients auto-instrument.",
+    items.push(
+      "**Traces:** Initialise OTel tracer SDK; inject + extract W3C TraceContext on every inbound + outbound call. Ensure DB/queue/HTTP clients auto-instrument.",
     );
   }
   if (input.slo_targets.length === 0) {
-    steps.push(
-      "4. **SLO:** Pick one SLI (e.g., availability) and one target (e.g., 99.9% over 30 days). Add fast-burn (1h, 14.4× rate) and slow-burn (6h, 6× rate) alerts.",
+    items.push(
+      "**SLO:** Pick one SLI (e.g., availability) and one target (e.g., 99.9% over 30 days). Add fast-burn (1h, 14.4× rate) and slow-burn (6h, 6× rate) alerts.",
     );
   }
   if (input.critical_user_journeys.length > 0) {
-    steps.push(
-      `5. **Journey instrumentation:** For each of the ${input.critical_user_journeys.length} critical journey(s), add a synthetic probe + a deadman's-switch alert.`,
+    items.push(
+      `**Journey instrumentation:** For each of the ${input.critical_user_journeys.length} critical journey(s), add a synthetic probe + a deadman's-switch alert.`,
     );
   }
-  return steps.length > 0
-    ? steps.join("\n\n")
+  return items.length > 0
+    ? items.map((item, i) => `${i + 1}. ${item}`).join("\n\n")
     : "_All required signals are present — focus on signal quality next._";
 }
 

@@ -135,6 +135,18 @@ export const GenerateApiSpecSchema = z.object({
 
 export const AnalyzeFeasibilitySchema = z.object({
   /**
+   * Name of the feature or project being evaluated.
+   * Used in the report title and executive summary.
+   */
+  feature_name: z
+    .string()
+    .trim()
+    .min(1, "feature_name cannot be empty")
+    .max(200, "feature_name must not exceed 200 characters")
+    .optional()
+    .describe('Feature or project name (e.g., "Real-time Order Tracking")'),
+
+  /**
    * List of libraries, frameworks, or cloud services to evaluate.
    * Each entry should include the version where possible (e.g., "prisma@5.0.0").
    * Capped at 50 items to prevent DoS via excessive analysis loops.
@@ -213,6 +225,41 @@ export const AnalyzeFeasibilitySchema = z.object({
     .enum(["self_hosted", "managed_cloud", "serverless", "edge"])
     .optional()
     .describe("Target deployment model"),
+
+  /**
+   * Free-text engineering constraints (e.g., "Must run on AWS ECS Fargate",
+   * "Zero-downtime rolling deploys required"). Each constraint is listed as
+   * a separate finding in the Constraint Analysis section.
+   */
+  constraints: z
+    .array(z.string().trim().min(1).max(300))
+    .max(20, "Maximum of 20 constraints")
+    .optional()
+    .describe("Engineering constraints that affect technology choices"),
+
+  /**
+   * Number of engineers available to implement and own this feature.
+   * Affects operational complexity scoring.
+   */
+  team_size: z
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe("Number of engineers on the team"),
+
+  /**
+   * Planned delivery timeline in weeks. Used in the executive summary and
+   * flags aggressive timelines relative to stack complexity.
+   */
+  timeline_weeks: z
+    .number()
+    .int()
+    .min(1)
+    .max(260)
+    .optional()
+    .describe("Planned delivery timeline in weeks"),
 });
 
 // ---------------------------------------------------------------------------

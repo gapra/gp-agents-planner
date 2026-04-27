@@ -63,12 +63,17 @@ export function generateFeasibilityReport(input: AnalyzeFeasibilityInput): strin
   const risks = collectRisks(input, findings, scores);
   const verdict = pickVerdict(scores, risks);
 
+  const featureName = input.feature_name ?? `${findings.length} component(s)`;
+
   return renderReport({
     tool: "analyze_technical_feasibility",
     schemaVersion: SCHEMA_VERSION,
-    title: `Technical Feasibility Report: ${findings.length} component(s)`,
+    title: `Technical Feasibility Report: ${featureName}`,
     context: {
+      feature: input.feature_name,
       proposed_stack: findings.map((f) => f.raw).join(", "),
+      team_size: input.team_size !== undefined ? `${input.team_size} engineers` : undefined,
+      timeline: input.timeline_weeks !== undefined ? `${input.timeline_weeks} weeks` : undefined,
       target_throughput_rps: input.target_throughput,
       data_consistency: input.data_consistency,
       runtime_environment: input.runtime_environment,
@@ -76,7 +81,7 @@ export function generateFeasibilityReport(input: AnalyzeFeasibilityInput): strin
       compliance_requirements: input.compliance_requirements?.join(", "),
       existing_stack_size: input.existing_stack?.length,
     },
-    executiveSummary: buildExecutiveSummary(findings, overall, verdict, risks.length),
+    executiveSummary: buildExecutiveSummary(input, findings, overall, verdict, risks),
     verdict,
     findings: [
       { heading: "3.1 Risk Scorecard", body: buildScorecard(scores, overall) },
@@ -494,11 +499,16 @@ function pickVerdict(scores: DimensionScore[], risks: RiskEntry[]): Verdict {
 }
 
 function buildExecutiveSummary(
+  input: AnalyzeFeasibilityInput,
   findings: PackageFinding[],
   overall: number,
   verdict: Verdict,
-  riskCount: number,
+  risks: RiskEntry[],
 ): string {
+  const subject = input.feature_name
+    ? `**${input.feature_name}** (${findings.length} component(s))`
+    : `The proposed stack of **${findings.length} component(s)**`;
+
   const verdictText = {
     approve: "is **approved** for implementation",
     approve_with_conditions:
@@ -506,12 +516,24 @@ function buildExecutiveSummary(
     reject: "is **rejected** until the listed blockers are resolved",
     needs_review: "**requires further review**",
   }[verdict];
+
+  const blockers = risks.filter((r) => r.severity === "blocker");
+  const highs = risks.filter((r) => r.severity === "high");
+  const timeline = input.timeline_weeks ? ` (${input.timeline_weeks}-week timeline, ${input.team_size ?? "?"} engineers)` : "";
+
+  const riskSentence =
+    blockers.length > 0
+      ? `**${blockers.length} blocker(s)** must be resolved before rollout: ${blockers.map((r) => `\`${r.id}\``).join(", ")}.`
+      : highs.length > 0
+        ? `No blockers, but **${highs.length} high-severity risk(s)** require explicit owner and mitigation plan.`
+        : risks.length === 0
+          ? "No risks crossed the medium threshold — proceed with standard engineering diligence."
+          : `${risks.length} medium-severity risk(s) identified — see Risk Register for mitigation.`;
+
   return [
-    `The proposed stack of ${findings.length} component(s) ${verdictText}.`,
+    `${subject}${timeline} ${verdictText}.`,
     `The weighted overall risk score is **${round(overall, 2)}/10** across 8 dimensions (security and license weighted ×2; maintenance ×1.5).`,
-    riskCount === 0
-      ? "No risks crossed the medium threshold."
-      : `${riskCount} risk item(s) were identified — see the Risk Register.`,
+    riskSentence,
   ].join(" ");
 }
 
@@ -532,13 +554,23 @@ function buildScorecard(scores: DimensionScore[], overall: number): string {
 }
 
 function buildPerPackageFindings(findings: PackageFinding[]): string {
-  return findings
-    .map((f) => {
-      const header = `#### \`${f.raw}\` _(${f.category})_`;
-      const noteLines = f.notes.map((n) => `- ${n}`).join("\n");
-      return `${header}\n${noteLines}`;
-    })
-    .join("\n\n");
+  const withNotes = findings.filter((f) => f.notes.length > 0);
+  const clean = findings.filter((f) => f.notes.length === 0);
+
+  const flaggedRows = withNotes.map((f) => {
+    const noteLines = f.notes.map((n) => `- ${n}`).join("\n");
+    return `#### \`${f.raw}\` _(${f.category})_\n\n${noteLines}`;
+  });
+
+  const cleanRows =
+    clean.length === 0
+      ? []
+      : [
+          `#### ✅ No issues detected`,
+          clean.map((f) => `- \`${f.raw}\` _(${f.category})_`).join("\n"),
+        ];
+
+  return [...flaggedRows, ...cleanRows].join("\n\n");
 }
 
 function buildConstraintAnalysis(
@@ -546,6 +578,13 @@ function buildConstraintAnalysis(
   findings: PackageFinding[],
 ): string {
   const lines: string[] = [];
+
+  if (input.constraints && input.constraints.length > 0) {
+    lines.push("**Engineering constraints declared by the team:**");
+    for (const c of input.constraints) lines.push(`- ${c}`);
+    lines.push("");
+  }
+
   if (input.target_throughput) {
     lines.push(`**Throughput target:** ${input.target_throughput.toLocaleString()} RPS.`);
     if (input.target_throughput >= 10_000) {
@@ -576,8 +615,9 @@ function buildConstraintAnalysis(
     }
   }
   if (input.deployment_model) {
-    lines.push(`**Deployment:** ${input.deployment_model}.`);
+    lines.push(`**Deployment model:** ${input.deployment_model}.`);
   }
+
   return lines.length === 0 ? "_No constraints provided._" : lines.join("\n");
 }
 
